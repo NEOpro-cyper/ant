@@ -234,7 +234,7 @@ function formatTime(sec: number): string {
 }
 
 /* ───── Settings sub-menu type ───── */
-type SettingsSubMenu = null | 'quality' | 'speed' | 'server' | 'zoom' | 'boost'
+type SettingsSubMenu = null | 'quality' | 'speed' | 'server' | 'zoom' | 'boost' | 'icons'
 
 /* ───── Main Component ───── */
 export default function VideoPlayer({
@@ -273,6 +273,7 @@ export default function VideoPlayer({
   const [showNextEpNotif, setShowNextEpNotif] = useState(false)
   const [nextEpCountdown, setNextEpCountdown] = useState(30)
   const [doubleTapRipple, setDoubleTapRipple] = useState<{ side: 'left' | 'right'; amount: number } | null>(null)
+  const [iconSet, setIconSet] = useState<'legacy' | 'modern'>('legacy')
 
   const [tikStream, setTikStream] = useState<StreamSource | null>(null)
   const [v4Streams, setV4Streams] = useState<StreamSource[]>([])
@@ -580,16 +581,18 @@ export default function VideoPlayer({
   }, [locked, skip])
 
   /* ── Click outside to close menus ── */
+  /* Uses mousedown instead of click so the handler fires BEFORE React re-renders
+     and detaches the clicked button from the DOM — which would make closest() fail */
   useEffect(() => {
     if (!showSettingsMenu && !showSubtitleMenu && !showEpisodeSidebar) return
-    const handleClick = (e: MouseEvent) => {
+    const handleDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement
       if (!target.closest('[data-player-menu]')) {
         setShowSettingsMenu(false); setShowSubtitleMenu(false); setShowEpisodeSidebar(false); setSettingsSubMenu(null)
       }
     }
-    const timer = setTimeout(() => document.addEventListener('click', handleClick), 100)
-    return () => { clearTimeout(timer); document.removeEventListener('click', handleClick) }
+    const timer = setTimeout(() => document.addEventListener('mousedown', handleDown), 100)
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', handleDown) }
   }, [showSettingsMenu, showSubtitleMenu, showEpisodeSidebar])
 
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0
@@ -891,7 +894,7 @@ export default function VideoPlayer({
 
       {/* ═══════ SETTINGS POPUP ═══════ */}
       {showSettingsMenu && (
-        <div data-player-menu className="absolute bottom-[7.5rem] sm:right-4 left-2 sm:left-auto w-[22rem] max-w-[calc(100vw-1rem)] max-h-[65vh] rounded-2xl animate-scale-in overflow-y-auto scrollbar-none bg-card/95 backdrop-blur-xl border border-white/10 shadow-2xl text-foreground origin-bottom-right z-30">
+        <div data-player-menu onClick={(e) => e.stopPropagation()} className="absolute bottom-[7.5rem] sm:right-4 left-2 sm:left-auto w-[22rem] max-w-[calc(100vw-1rem)] max-h-[65vh] rounded-2xl animate-scale-in overflow-y-auto scrollbar-none bg-card/95 backdrop-blur-xl border border-white/10 shadow-2xl text-foreground origin-bottom-right z-30">
 
           {settingsSubMenu === null ? (
             /* ── Main Settings Menu ── */
@@ -924,13 +927,6 @@ export default function VideoPlayer({
                 <Solar.ChevronRight className="h-4 w-4 text-muted-foreground" />
               </button>
 
-              <button className="flex items-center gap-3 w-full px-4 py-3 hover:bg-white/5 text-sm transition">
-                <Solar.Pen className="h-5 w-5 shrink-0" />
-                <span className="flex-1 text-left">Subtitle style</span>
-                <span className="text-muted-foreground">&mdash;</span>
-                <Solar.ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </button>
-
               <button onClick={() => setSettingsSubMenu('zoom')} className="flex items-center gap-3 w-full px-4 py-3 hover:bg-white/5 text-sm transition">
                 <Solar.ZoomIn className="h-5 w-5 shrink-0" />
                 <span className="flex-1 text-left">Video</span>
@@ -952,10 +948,10 @@ export default function VideoPlayer({
                 <Solar.ChevronRight className="h-4 w-4 text-muted-foreground" />
               </button>
 
-              <button className="flex items-center gap-3 w-full px-4 py-3 hover:bg-white/5 text-sm transition">
+              <button onClick={() => setSettingsSubMenu('icons')} className="flex items-center gap-3 w-full px-4 py-3 hover:bg-white/5 text-sm transition">
                 <Solar.Palette className="h-5 w-5 shrink-0" />
                 <span className="flex-1 text-left">Icons Set</span>
-                <span className="text-muted-foreground">Legacy</span>
+                <span className="text-muted-foreground capitalize">{iconSet}</span>
                 <Solar.ChevronRight className="h-4 w-4 text-muted-foreground" />
               </button>
             </>
@@ -1063,13 +1059,31 @@ export default function VideoPlayer({
                 </div>
               </div>
             </>
+          ) : settingsSubMenu === 'icons' ? (
+            /* ── Icons Set Sub-menu ── */
+            <>
+              <div className="flex items-center gap-2 px-3 py-3 border-b border-white/10">
+                <button onClick={() => setSettingsSubMenu(null)} className="p-1 hover:bg-white/10 rounded-full transition"><Solar.ChevronLeft className="h-5 w-5" /></button>
+                <Solar.Palette className="h-5 w-5" />
+                <span className="font-semibold flex-1">Icons Set</span>
+                <button onClick={() => { setShowSettingsMenu(false); setSettingsSubMenu(null) }} className="p-1.5 rounded-full hover:bg-white/10 transition"><Solar.CircleX className="h-5 w-5" /></button>
+              </div>
+              <div className="py-1">
+                {(['legacy', 'modern'] as const).map(style => (
+                  <button key={style} onClick={() => { setIconSet(style); setSettingsSubMenu(null) }}
+                    className="flex items-center justify-between w-full px-4 py-3 hover:bg-white/5 text-sm transition">
+                    <span className="capitalize">{style === 'legacy' ? 'Legacy (Filled)' : 'Modern (Outline)'}</span>{iconSet === style && <Solar.Check />}
+                  </button>
+                ))}
+              </div>
+            </>
           ) : null}
         </div>
       )}
 
       {/* ═══════ SUBTITLES POPUP ═══════ */}
       {showSubtitleMenu && (
-        <div data-player-menu className="absolute bottom-[7.5rem] sm:right-28 left-2 sm:left-auto w-[22rem] max-w-[calc(100vw-1rem)] max-h-[65vh] rounded-2xl animate-scale-in overflow-y-auto scrollbar-none bg-card/95 backdrop-blur-xl border border-white/10 shadow-2xl text-foreground origin-bottom-right z-30">
+        <div data-player-menu onClick={(e) => e.stopPropagation()} className="absolute bottom-[7.5rem] sm:right-28 left-2 sm:left-auto w-[22rem] max-w-[calc(100vw-1rem)] max-h-[65vh] rounded-2xl animate-scale-in overflow-y-auto scrollbar-none bg-card/95 backdrop-blur-xl border border-white/10 shadow-2xl text-foreground origin-bottom-right z-30">
           <div className="flex items-center gap-2 px-3 py-3 border-b border-white/10">
             <span className="font-semibold flex-1">Subtitles</span>
             <button onClick={() => setShowSubtitleMenu(false)} className="p-1.5 rounded-full hover:bg-white/10 transition">
@@ -1101,7 +1115,7 @@ export default function VideoPlayer({
 
       {/* ═══════ EPISODE SIDEBAR (MeowTV: full overlay, bottom slide-up) ═══════ */}
       {showEpisodeSidebar && type === 'tv' && (
-        <div className="absolute inset-0 z-30 flex items-end justify-stretch" onClick={(e) => { if (e.target === e.currentTarget) setShowEpisodeSidebar(false) }}>
+        <div className="absolute inset-0 z-30 flex items-end justify-stretch" onClick={(e) => { if (e.target === e.currentTarget) setShowEpisodeSidebar(false) }} onMouseDown={(e) => e.stopPropagation()}>
           <div data-player-menu className="w-full max-h-[60vh] pt-16 animate-slide-up overflow-hidden text-foreground bg-gradient-to-t from-black via-black/95 via-50% to-transparent">
 
             {/* Header */}
