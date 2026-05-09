@@ -4,6 +4,10 @@ const V17_GATE = 'https://gate.flicky.host/v17'
 const V4_GATE = 'https://gate.flicky.host/v4'
 const SUB_API = 'https://sub.vdrk.site/v1'
 
+// Set CDN_WORKER_DOMAIN in your .env to replace cdn.1shows.app with your own worker
+// Example: CDN_WORKER_DOMAIN=https://my-worker.my-account.workers.dev
+const CDN_WORKER_DOMAIN = process.env.CDN_WORKER_DOMAIN || ''
+
 interface StreamSource {
   server: string
   language?: string
@@ -27,16 +31,32 @@ interface MovieResponse {
   subtitles: SubtitleTrack[]
 }
 
+function replaceCdn(url: string): string {
+  if (!CDN_WORKER_DOMAIN) return url
+  return url.replace('https://cdn.1shows.app', CDN_WORKER_DOMAIN)
+}
+
+function cleanHeaders(headers: Record<string, string>, url: string): Record<string, string> {
+  // If the URL has been rewritten to a worker domain, the worker handles Referer/auth
+  // so we don't need client-side headers anymore
+  if (CDN_WORKER_DOMAIN && url.startsWith(CDN_WORKER_DOMAIN)) {
+    return {}
+  }
+  return headers
+}
+
 async function fetchV17(id: string): Promise<StreamSource | null> {
   try {
     const res = await fetch(`${V17_GATE}/movie/${id}`, { signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const data = await res.json()
     if (!data?.stream?.url) return null
+    const url = replaceCdn(data.stream.url)
+    const headers = { Referer: 'https://meowtv.ru/' }
     return {
       server: 'Tik',
-      url: data.stream.url,
-      headers: { Referer: 'https://meowtv.ru/' },
+      url,
+      headers: cleanHeaders(headers, url),
       qualities: ['720p', '1080p'],
     }
   } catch {
@@ -50,13 +70,17 @@ async function fetchV4(id: string): Promise<StreamSource[]> {
     if (!res.ok) return []
     const data = await res.json()
     if (!data?.streams || !Array.isArray(data.streams)) return []
-    return data.streams.map((s: { language?: string; url: string; headers?: Record<string, string> }) => ({
-      server: 'V4',
-      language: s.language || 'Unknown',
-      url: s.url,
-      headers: s.headers || {},
-      qualities: ['360p', '480p', '720p', '1080p'],
-    }))
+    return data.streams.map((s: { language?: string; url: string; headers?: Record<string, string> }) => {
+      const url = replaceCdn(s.url)
+      const headers = s.headers || {}
+      return {
+        server: 'V4',
+        language: s.language || 'Unknown',
+        url,
+        headers: cleanHeaders(headers, url),
+        qualities: ['360p', '480p', '720p', '1080p'],
+      }
+    })
   } catch {
     return []
   }
